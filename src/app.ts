@@ -1,8 +1,12 @@
-// src/app.ts
+// src/app.ts (VERSION MISE À JOUR)
 import { generateTierData, computeTierLetter, listSynergies,
          generateMatches, fmtPct, fmtDelta,
          HEROES, MAPS, HERO_NAME, MAP_NAME, MAP_THUMB,
          type Rank, type TierRow, type MatchItem } from './stats';
+import { loadAll } from './api';
+import { mountHeatmap } from './heatmap';
+import { mountTimeline } from './timeline';
+import { mountGoals } from './goals';
 
 const $ = (sel:string,root:Document|HTMLElement=document)=>root.querySelector(sel) as HTMLElement;
 const $$ = (sel:string,root:Document|HTMLElement=document)=>Array.from(root.querySelectorAll(sel)) as HTMLElement[];
@@ -25,7 +29,7 @@ function mountStyles(){
   html,body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Arial,sans-serif;margin:0}
   .container{max-width:1120px;margin:0 auto;padding:24px}
   h1{font-size:32px;margin:0 0 16px}
-  .tabs{display:flex;gap:8px;margin:16px 0}
+  .tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
   .tab{background:#141821;border:1px solid var(--line);padding:8px 12px;border-radius:12px;cursor:pointer}
   .tab.active{outline:2px solid #3b82f6}
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
@@ -55,7 +59,6 @@ function mountStyles(){
   .match .content{position:relative;padding:12px}
   .match .pill{position:absolute;top:10px;right:10px}
   .kda{color:var(--muted);font-size:12px}
-  .accounts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   @media(max-width:900px){ .grid{grid-template-columns:repeat(3,1fr)} .tiers{grid-template-columns:1.5fr 1fr 1fr 1fr 1fr}}
   `;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
@@ -64,12 +67,14 @@ function mountStyles(){
 function layout(){
   document.body.innerHTML = `
   <div class="container">
-    <h1>OWGG — <span style="color:#9aa0a6">Tiers, Synergies & Matchs</span></h1>
+    <h1>OWGG — <span style="color:#9aa0a6">Tiers, Synergies, Heatmap</span></h1>
     <div class="row">
       <div class="tabs" id="tabs">
         <div class="tab active" data-tab="tiers">Tier list</div>
         <div class="tab" data-tab="matches">Matchs</div>
-        <div class="tab" data-tab="account">Mon compte</div>
+        <div class="tab" data-tab="heatmap">Heatmap</div>
+        <div class="tab" data-tab="timeline">Timeline</div>
+        <div class="tab" data-tab="account">Objectifs</div>
       </div>
       <select id="rank">
         ${(['Bronze','Silver','Gold','Platinum','Diamond','Master','GM'] as Rank[]).map(r=>`<option ${r===STATE.rank?'selected':''}>${r}</option>`).join('')}
@@ -100,7 +105,7 @@ function layout(){
 function viewTiers(){
   const rows = TIER_ROWS.filter(r=>r.rank===STATE.rank && (!STATE.mapId || r.mapId===STATE.mapId));
   const byHero = new Map<string,TierRow>();
-  for(const r of rows) if(!byHero.has(r.heroId)) byHero.set(r.heroId,r); // prend la version “globale” prioritaire
+  for(const r of rows) if(!byHero.has(r.heroId)) byHero.set(r.heroId,r);
   const heroList = HEROES.filter(h=>STATE.role==='All' || h.role===STATE.role);
   heroList.sort((a,b)=>{
     const ra = byHero.get(a.id)?.winRate ?? 0;
@@ -172,35 +177,39 @@ function viewMatches(){
   </div>`;
 }
 
-function viewAccount(){
-  // Stats perso simples basées sur MATCHES
-  const total = MATCHES.length;
-  const wins = MATCHES.filter(m=>m.result==='Win').length;
-  const wr = total? ((wins/total)*100).toFixed(1)+'%' : '—';
-  const most = (()=>{ const c=new Map<string,number>(); for(const m of MATCHES){ c.set(m.heroId,(c.get(m.heroId)||0)+1); }
-    let best=''; let n=0; for(const [h,k] of c){ if(k>n){n=k;best=h;} } return HERO_NAME(best) || '—'; })();
-
-  return `
-  <div class="grid">
-    <div class="card"><div class="kpi">Parties: <strong>${total}</strong></div></div>
-    <div class="card"><div class="kpi">Winrate: <strong>${wr}</strong></div></div>
-    <div class="card"><div class="kpi">Plus joué: <strong>${most}</strong></div></div>
-  </div>
-  `;
+function viewHeatmap(){
+  const div = document.createElement('div');
+  mountHeatmap(div, MATCHES);
+  return div.outerHTML;
 }
 
-function render(tab:'tiers'|'matches'|'account' = 'tiers'){
+function viewTimeline(){
+  const div = document.createElement('div');
+  mountTimeline(div, MATCHES);
+  return div.outerHTML;
+}
+
+function viewGoals(){
+  const div = document.createElement('div');
+  mountGoals(div, MATCHES);
+  return div.outerHTML;
+}
+
+function render(tab:'tiers'|'matches'|'account'|'heatmap'|'timeline' = 'tiers'){
   const view = $('#view')!;
   if(tab==='tiers') view.innerHTML = viewTiers();
   if(tab==='matches') view.innerHTML = viewMatches();
-  if(tab==='account') view.innerHTML = viewAccount();
+  if(tab==='heatmap') view.innerHTML = viewHeatmap();
+  if(tab==='timeline') view.innerHTML = viewTimeline();
+  if(tab==='account') view.innerHTML = viewGoals();
 }
 
-export default function App(){
+export default async function App(){
   mountStyles();
   layout();
-  // “Toujours activer images”: on ne bloque pas, on charge directement les thumbs
-  TIER_ROWS = generateTierData();
-  MATCHES = generateMatches(TIER_ROWS);
+  // Charge via façade (future API)
+  const data = await loadAll();
+  TIER_ROWS = data.tiers;
+  MATCHES = data.matches;
   render('tiers');
 }
