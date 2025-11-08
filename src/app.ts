@@ -1,15 +1,13 @@
-// src/app.ts (VERSION MISE À JOUR)
-import { generateTierData, computeTierLetter, listSynergies,
-         generateMatches, fmtPct, fmtDelta,
-         HEROES, MAPS, HERO_NAME, MAP_NAME, MAP_THUMB,
-         type Rank, type TierRow, type MatchItem } from './stats';
-import { loadAll } from './api';
-import { mountHeatmap } from './heatmap';
-import { mountTimeline } from './timeline';
-import { mountGoals } from './goals';
+// src/app.ts — version “OPGG-like” (une seule page, feed vertical)
+import {
+  generateTierData, computeTierLetter, listSynergies,
+  generateMatches, fmtPct, fmtDelta,
+  HEROES, MAPS, HERO_NAME, MAP_NAME, MAP_THUMB,
+  type Rank, type TierRow, type MatchItem
+} from './stats';
 
-const $ = (sel:string,root:Document|HTMLElement=document)=>root.querySelector(sel) as HTMLElement;
-const $$ = (sel:string,root:Document|HTMLElement=document)=>Array.from(root.querySelectorAll(sel)) as HTMLElement[];
+const $ = (s:string, r:Document|HTMLElement=document)=>r.querySelector(s) as HTMLElement;
+const $$ = (s:string, r:Document|HTMLElement=document)=>Array.from(r.querySelectorAll(s)) as HTMLElement[];
 
 let TIER_ROWS: TierRow[] = [];
 let MATCHES: MatchItem[] = [];
@@ -20,25 +18,24 @@ const STATE = {
   role: 'All' as 'All'|'Tank'|'DPS'|'Support'
 };
 
+// ===== styles =====
 function mountStyles(){
   const css = `
   :root{
     --bg:#0b0c10; --fg:#e5e7eb; --muted:#9aa0a6;
-    --card:#12151a; --line:#2a2f38; --blue:#4aa3ff; --red:#ff5a68; --green:#34d399; --amber:#fbbf24;
+    --card:#12151a; --line:#2a2f38; --blue:#4aa3ff; --red:#ff5a68; --green:#34d399;
   }
   html,body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Arial,sans-serif;margin:0}
-  .container{max-width:1120px;margin:0 auto;padding:24px}
-  h1{font-size:32px;margin:0 0 16px}
-  .tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
-  .tab{background:#141821;border:1px solid var(--line);padding:8px 12px;border-radius:12px;cursor:pointer}
-  .tab.active{outline:2px solid #3b82f6}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  select,button{background:#161a22;color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .container{max-width:1200px;margin:0 auto;padding:24px}
+  h1{font-size:34px;margin:0 0 12px}
+  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  select{background:#161a22;color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .layout{display:grid;grid-template-columns:3fr 1.2fr;gap:16px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
-  .kpi{display:flex;gap:8px;align-items:center}
-  .delta.pos{color:var(--green)} .delta.neg{color:var(--red)} .pill{font-size:12px;padding:2px 8px;border-radius:999px;background:#111;border:1px solid var(--line)}
-  .tiers{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:6px;align-items:center}
+  .section-title{font-weight:700;margin-bottom:10px}
+
+  /* Tiers */
+  .tiers{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.5fr;gap:6px;align-items:center}
   .tiers .head{color:var(--muted);font-size:12px}
   .heroRow{display:contents}
   .badge{font-weight:700;border-radius:10px;padding:2px 8px;color:#111;display:inline-block}
@@ -47,35 +44,48 @@ function mountStyles(){
   .B{background:#60a5fa;color:#0b1220}
   .C{background:#a78bfa;color:#0e0a1a}
   .D{background:#9ca3af;color:#111}
+  .delta.pos{color:var(--green)} .delta.neg{color:var(--red)}
+  .pill{font-size:12px;padding:2px 8px;border-radius:999px;background:#111;border:1px solid var(--line)}
   .synergy{display:flex;gap:8px;flex-wrap:wrap}
-  .synergy .item{background:#0f131b;border:1px solid var(--line);padding:6px 10px;border-radius:999px}
-  .synergy .pos{border-color:#1f8f62;color:#34d399}
-  .synergy .neg{border-color:#9b2c2c;color:#ff7a85}
-  .matches{display:flex;gap:12px;overflow:auto;padding-bottom:8px}
-  .match{min-width:270px;background:var(--card);border:2px solid var(--line);border-radius:18px;position:relative}
-  .match.win{border-color:rgba(74,163,255,.65); box-shadow:0 0 0 2px rgba(74,163,255,.15) inset}
-  .match.loss{border-color:rgba(255,90,104,.65); box-shadow:0 0 0 2px rgba(255,90,104,.12) inset}
-  .match .bg{position:absolute;inset:0;border-radius:16px;opacity:.18;background-size:cover;background-position:center;filter:saturate(.9) contrast(1.05)}
+  .synergy .item{background:#0f131b;border:1px solid var(--line);padding:4px 8px;border-radius:999px}
+
+  /* Feed vertical (matches) */
+  .matches{
+    display:flex;
+    flex-direction:column;   /* vertical */
+    gap:12px;
+    overflow:visible;
+    padding:0;
+  }
+  .match{
+    width:100%;
+    background:var(--card);
+    border:2px solid var(--line);
+    border-radius:18px;
+    position:relative;
+  }
+  .match.win{border-color:rgba(74,163,255,.65); box-shadow:0 0 0 2px rgba(74,163,255,.12) inset}
+  .match.loss{border-color:rgba(255,90,104,.65); box-shadow:0 0 0 2px rgba(255,90,104,.10) inset}
+  .match .bg{position:absolute;inset:0;border-radius:16px;opacity:.20;background-size:cover;background-position:center;filter:saturate(.95) contrast(1.06)}
   .match .content{position:relative;padding:12px}
   .match .pill{position:absolute;top:10px;right:10px}
   .kda{color:var(--muted);font-size:12px}
-  @media(max-width:900px){ .grid{grid-template-columns:repeat(3,1fr)} .tiers{grid-template-columns:1.5fr 1fr 1fr 1fr 1fr}}
+
+  /* KPIs */
+  .kpi{display:flex;gap:6px;align-items:center}
+
+  @media(max-width:1000px){ .layout{grid-template-columns:1fr} }
   `;
-  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+  const s=document.createElement('style'); s.textContent=css; document.head.appendChild(s);
 }
 
+// ===== structure =====
 function layout(){
   document.body.innerHTML = `
   <div class="container">
     <h1>OWGG — <span style="color:#9aa0a6">Tiers, Synergies, Heatmap</span></h1>
-    <div class="row">
-      <div class="tabs" id="tabs">
-        <div class="tab active" data-tab="tiers">Tier list</div>
-        <div class="tab" data-tab="matches">Matchs</div>
-        <div class="tab" data-tab="heatmap">Heatmap</div>
-        <div class="tab" data-tab="timeline">Timeline</div>
-        <div class="tab" data-tab="account">Objectifs</div>
-      </div>
+
+    <div class="filters">
       <select id="rank">
         ${(['Bronze','Silver','Gold','Platinum','Diamond','Master','GM'] as Rank[]).map(r=>`<option ${r===STATE.rank?'selected':''}>${r}</option>`).join('')}
       </select>
@@ -88,75 +98,67 @@ function layout(){
       </select>
     </div>
 
-    <div id="view"></div>
+    <div class="layout">
+      <div id="col-main"></div>
+      <div id="col-side"></div>
+    </div>
   </div>`;
-  $('#rank')!.addEventListener('change',e=>{ STATE.rank = (e.target as HTMLSelectElement).value as Rank; render(); });
+  $('#rank')!.addEventListener('change',e=>{ STATE.rank=(e.target as HTMLSelectElement).value as Rank; render(); });
   $('#map')!.addEventListener('change',e=>{ const v=(e.target as HTMLSelectElement).value; STATE.mapId = v||undefined; render(); });
-  $('#role')!.addEventListener('change',e=>{ STATE.role = (e.target as HTMLSelectElement).value as any; render(); });
-  $$('.tab','#tabs').forEach(t=>{
-    t.addEventListener('click',()=>{
-      $$('.tab','#tabs').forEach(x=>x.classList.remove('active'));
-      t.classList.add('active');
-      render((t as HTMLElement).dataset.tab as any);
-    });
-  });
+  $('#role')!.addEventListener('change',e=>{ STATE.role=(e.target as HTMLSelectElement).value as any; render(); });
 }
 
-function viewTiers(){
+// ===== vues =====
+function viewTiers():string{
   const rows = TIER_ROWS.filter(r=>r.rank===STATE.rank && (!STATE.mapId || r.mapId===STATE.mapId));
-  const byHero = new Map<string,TierRow>();
-  for(const r of rows) if(!byHero.has(r.heroId)) byHero.set(r.heroId,r);
-  const heroList = HEROES.filter(h=>STATE.role==='All' || h.role===STATE.role);
-  heroList.sort((a,b)=>{
-    const ra = byHero.get(a.id)?.winRate ?? 0;
-    const rb = byHero.get(b.id)?.winRate ?? 0;
-    return rb-ra;
-  });
+  const bestByHero = new Map<string,TierRow>();
+  for(const r of rows){
+    const k=r.heroId;
+    if(!bestByHero.has(k) || (bestByHero.get(k)!.winRate<r.winRate)) bestByHero.set(k,r);
+  }
+  const heroList = HEROES
+    .filter(h=>STATE.role==='All' || h.role===STATE.role)
+    .sort((a,b)=>(bestByHero.get(b.id)?.winRate ?? 0)-(bestByHero.get(a.id)?.winRate ?? 0));
 
   const rowsHtml = heroList.map(h=>{
-    const r = byHero.get(h.id);
-    if(!r) return '';
+    const r = bestByHero.get(h.id); if(!r) return '';
     const tier = computeTierLetter(r.winRate, r.sample);
-    const deltaW = r.delta7d?.winRate ?? 0;
-    const deltaP = r.delta7d?.pickRate ?? 0;
-    const dW = `<span class="delta ${deltaW>0?'pos':deltaW<0?'neg':''}">${fmtDelta(deltaW)}</span>`;
-    const dP = `<span class="delta ${deltaP>0?'pos':deltaP<0?'neg':''}">${fmtDelta(deltaP)}</span>`;
-    const syns = listSynergies(TIER_ROWS, h.id, STATE.rank, STATE.mapId);
-    const synHtml = syns.map(s=>{
-      const c = s.score>=0 ? 'pos' : 'neg';
-      const nm = HERO_NAME(s.withHeroId);
-      return `<span class="item ${c}">${nm} ${s.score>=0?'+':''}${(s.score*100).toFixed(1)}%</span>`;
-    }).join('');
+    const dW = r.delta7d?.winRate ?? 0, dP = r.delta7d?.pickRate ?? 0;
+    const syns = listSynergies(TIER_ROWS, h.id, STATE.rank, STATE.mapId).slice(0,4);
     return `
-    <div class="heroRow">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="badge ${tier}">${tier}</span>
-        <strong>${h.name}</strong> <span class="pill">${h.role}</span>
+      <div class="heroRow">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="badge ${tier}">${tier}</span>
+          <strong>${h.name}</strong> <span class="pill">${h.role}</span>
+        </div>
+        <div>${fmtPct(r.winRate)} <span class="delta ${dW>0?'pos':dW<0?'neg':''}">${fmtDelta(dW)}</span></div>
+        <div>${fmtPct(r.pickRate)} <span class="delta ${dP>0?'pos':dP<0?'neg':''}">${fmtDelta(dP)}</span></div>
+        <div>n=${r.sample}</div>
+        <div class="synergy">
+          ${syns.map(s=>`<span class="item" style="color:${s.score>=0?'#34d399':'#ff7a85'}">${HERO_NAME(s.withHeroId)} ${(s.score>=0?'+':'')}${(s.score*100).toFixed(1)}%</span>`).join('')}
+        </div>
       </div>
-      <div>${fmtPct(r.winRate)} ${dW}</div>
-      <div>${fmtPct(r.pickRate)} ${dP}</div>
-      <div class="kpi">n=${r.sample}</div>
-      <div class="synergy">${synHtml}</div>
-    </div>`;
+    `;
   }).join('');
 
   return `
-  <div class="card">
-    <div class="tiers">
-      <div class="head">Héros</div>
-      <div class="head">Winrate</div>
-      <div class="head">Pick</div>
-      <div class="head">Sample</div>
-      <div class="head">Synergies / Contres</div>
-      ${rowsHtml}
-    </div>
-  </div>`;
+    <div class="card">
+      <div class="section-title">Tier list</div>
+      <div class="tiers">
+        <div class="head">Héros</div>
+        <div class="head">Winrate</div>
+        <div class="head">Pick</div>
+        <div class="head">Sample</div>
+        <div class="head">Synergies / Contres</div>
+        ${rowsHtml}
+      </div>
+    </div>`;
 }
 
-function viewMatches(){
+function viewMatches():string{
   const items = MATCHES.map(m=>{
     const win = m.result==='Win';
-    const bg = MAP_THUMB(m.mapId);
+    const bg = MAP_THUMB(m.mapId); // image HTTPS (pas de prompt d’autorisation)
     const kda = `${m.kda[0]}/${m.kda[1]}/${m.kda[2]}`;
     return `
     <div class="match ${win?'win':'loss'}">
@@ -172,44 +174,43 @@ function viewMatches(){
   }).join('');
 
   return `
-  <div class="card">
-    <div class="matches">${items}</div>
-  </div>`;
+    <div class="card">
+      <div class="section-title">Historique</div>
+      <div class="matches">${items}</div>
+    </div>`;
 }
 
-function viewHeatmap(){
-  const div = document.createElement('div');
-  mountHeatmap(div, MATCHES);
-  return div.outerHTML;
+function viewSide():string{
+  const total = MATCHES.length;
+  const wins  = MATCHES.filter(m=>m.result==='Win').length;
+  const wr = total? (wins/total):0;
+
+  return `
+    <div class="card">
+      <div class="section-title">Mes KPIs</div>
+      <div class="kpi">Parties: <strong>${total}</strong></div>
+      <div class="kpi">Victoires: <strong>${wins}</strong></div>
+      <div class="kpi">Winrate: <strong>${(wr*100).toFixed(1)}%</strong></div>
+      <hr style="border-color:var(--line);opacity:.4;margin:10px 0">
+      <div class="kpi">Objectif Winrate 55%
+        <div style="flex:1;height:8px;background:#111;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-left:8px">
+          <div style="width:${Math.min(100, (wr/0.55)*100)}%;height:100%;background:#34d399"></div>
+        </div>
+      </div>
+    </div>`;
 }
 
-function viewTimeline(){
-  const div = document.createElement('div');
-  mountTimeline(div, MATCHES);
-  return div.outerHTML;
-}
-
-function viewGoals(){
-  const div = document.createElement('div');
-  mountGoals(div, MATCHES);
-  return div.outerHTML;
-}
-
-function render(tab:'tiers'|'matches'|'account'|'heatmap'|'timeline' = 'tiers'){
-  const view = $('#view')!;
-  if(tab==='tiers') view.innerHTML = viewTiers();
-  if(tab==='matches') view.innerHTML = viewMatches();
-  if(tab==='heatmap') view.innerHTML = viewHeatmap();
-  if(tab==='timeline') view.innerHTML = viewTimeline();
-  if(tab==='account') view.innerHTML = viewGoals();
+// ===== render =====
+function render(){
+  $('#col-main')!.innerHTML = viewTiers() + viewMatches();
+  $('#col-side')!.innerHTML = viewSide();
 }
 
 export default async function App(){
   mountStyles();
   layout();
-  // Charge via façade (future API)
-  const data = await loadAll();
-  TIER_ROWS = data.tiers;
-  MATCHES = data.matches;
-  render('tiers');
+  // Données locales (aucun appel réseau)
+  TIER_ROWS = generateTierData();
+  MATCHES   = generateMatches(TIER_ROWS);
+  render();
 }
