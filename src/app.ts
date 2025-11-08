@@ -1,234 +1,331 @@
-// src/app.ts — OPPG-like, feed vertical + vraies images de cartes + portrait héros + synergies
+// src/app.ts
 import {
-  generateTierData, computeTierLetter, listSynergies,
-  generateMatches, fmtPct, fmtDelta,
-  HEROES, MAPS, HERO_NAME, MAP_NAME, MAP_THUMB,
-  MAP_IMAGE, HERO_ICON,            // <— nouveaux helpers (Step 2)
-  type Rank, type TierRow, type MatchItem
+  HEROES, MAPS,
+  generateTierData, generateMatches,
+  fmtPct, fmtDelta,
+  computeTierLetter,
+  HERO_ICON, MAP_THUMB,
+  Hero, MapInfo, MatchItem, TierRow
 } from './stats';
+import { setBgWithFallback } from './imgFallback';
 
-const $ = (s:string, r:Document|HTMLElement=document)=>r.querySelector(s) as HTMLElement;
+// ———————————————————————————————
+// CSS minimal injecté pour assurer le rendu
+// (si tu as déjà un fichier CSS, tu peux supprimer ce bloc)
+const CSS = `
+:root{
+  --bg:#0b0c10; --card:#12141a; --muted:#1b1e26; --text:#e6e9ef;
+  --sub:#a3aab9; --blue:#3aa1ff; --red:#ff5b6a; --green:#30d158;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif}
+a{color:inherit}
+.container{max-width:960px;margin:0 auto;padding:16px}
+.h1{font-size:32px;font-weight:800;letter-spacing:.3px;margin:8px 0 20px}
+.badge{padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);font-size:12px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.08);border-radius:16px}
+.section{padding:16px 18px}
 
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:12px 10px;border-top:1px solid rgba(255,255,255,.06)}
+.table thead th{color:var(--sub);font-weight:600;text-align:left;border-top:none}
+
+.tier-pill{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:#243; font-weight:700}
+.tier-a{background:#13391f;color:#8fffab} .tier-b{background:#11283d;color:#8fd2ff}
+.tier-c{background:#3a2c12;color:#ffd38a} .tier-d{background:#3a1212;color:#ff9e9e} .tier-s{background:#1a2b3a;color:#9fe3ff}
+
+.kpi{display:flex;gap:18px;align-items:baseline}
+.kpi .big{font-size:20px;font-weight:700}
+.kpi .delta-up{color:var(--green);font-size:14px}
+.kpi .delta-down{color:var(--red);font-size:14px}
+
+.hero-chip{display:inline-flex;align-items:center;gap:10px}
+.hero-chip img{width:28px;height:28px;border-radius:6px;object-fit:cover;border:1px solid rgba(255,255,255,.12)}
+
+.synergy-col{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.synergy-pill{padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-size:13px}
+.synergy-pos{border-color:rgba(48,209,88,.35);color:#9ff5b6}
+.synergy-neg{border-color:rgba(255,91,106,.35);color:#ffb3bb}
+
+.feed{display:flex;flex-direction:column;gap:14px;margin-top:10px}
+.match{position:relative;overflow:hidden;padding:16px;border-radius:16px;border:2px solid transparent}
+.match.win{border-color:rgba(58,161,255,.7)} .match.loss{border-color:rgba(255,91,106,.7)}
+.match .bg{position:absolute;inset:0;background-position:center;background-size:cover;filter:brightness(.55) saturate(1.05);transform:scale(1.02)}
+.match .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35),rgba(0,0,0,.5))}
+.match .content{position:relative;display:flex;gap:14px;align-items:center}
+.match .left{display:flex;align-items:center;gap:12px;min-width:0}
+.match .hero{width:54px;height:54px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.18);background:#000}
+.match .hero img{width:100%;height:100%;object-fit:cover}
+.match .meta{display:flex;flex-direction:column;gap:4px;min-width:0}
+.match .title{font-weight:800;font-size:18px}
+.match .sub{color:var(--sub);font-size:14px}
+.match .kda{color:#dfe6f3;font-size:13px}
+.match .right{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.match .result{padding:4px 10px;border-radius:999px;font-weight:700;background:rgba(0,0,0,.35)}
+.match.win .result{color:#b9dcff;border:1px solid rgba(58,161,255,.6)}
+.match.loss .result{color:#ffd0d5;border:1px solid rgba(255,91,106,.6)}
+.footer{margin-top:22px;color:var(--sub);font-size:12px;text-align:center}
+`;
+(function injectCSS() {
+  if (document.getElementById('owgg-css')) return;
+  const s = document.createElement('style');
+  s.id = 'owgg-css'; s.textContent = CSS;
+  document.head.appendChild(s);
+})();
+// ———————————————————————————————
+
+type State = {
+  rank: 'Platinum';     // tu peux rendre dynamique plus tard
+  mapId: 'all' | string;
+  role: 'All' | 'Tank' | 'DPS' | 'Support';
+};
+
+const state: State = { rank:'Platinum', mapId:'all', role:'All' };
+
+// Cache pour éviter de régénérer à chaque fois
 let TIER_ROWS: TierRow[] = [];
 let MATCHES: MatchItem[] = [];
 
-const STATE = {
-  rank: 'Platinum' as Rank,
-  mapId: '' as string|undefined,
-  role: 'All' as 'All'|'Tank'|'DPS'|'Support'
-};
+function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K, cls?: string, text?: string
+){
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  if (text) el.textContent = text;
+  return el;
+}
 
-function mountStyles(){
-  const css = `
-  :root{
-    --bg:#0b0c10; --fg:#e5e7eb; --muted:#9aa0a6;
-    --card:#111418; --line:#222832;
-    --blue:#59a9ff; --red:#ff6a76; --green:#34d399; --gold:#f59e0b;
+function mountRoot(): HTMLElement {
+  let root = document.getElementById('app');
+  if (!root) {
+    root = h('div'); root.id = 'app';
+    document.body.appendChild(root);
   }
-  html,body{background:var(--bg);color:var(--fg);font-family:Inter,system-ui,Arial,sans-serif;margin:0}
-  .container{max-width:1200px;margin:0 auto;padding:24px}
-  h1{font-size:34px;margin:0 0 12px;letter-spacing:.3px}
-  .sub{color:var(--muted);margin-bottom:10px}
-  .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
-  select{appearance:none;background:#161a22;color:var(--fg);
-    border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-weight:600}
-  .layout{display:grid;grid-template-columns:3fr 1.2fr;gap:18px}
-  .card{background:linear-gradient(180deg,#0f1217 0%, #0b0e13 100%);
-    border:1px solid var(--line);border-radius:16px;padding:14px}
-  .section-title{font-weight:800;margin-bottom:10px;letter-spacing:.2px}
-  /* Tiers */
-  .tiers{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1.5fr;gap:6px;align-items:center}
-  .tiers .head{color:var(--muted);font-size:12px}
-  .heroRow{display:contents}
-  .badge{font-weight:900;border-radius:10px;padding:2px 8px;color:#111;display:inline-block}
-  .S{background:linear-gradient(45deg,#fde047,#f59e0b);color:#111}
-  .A{background:#10b981;color:#062a23}
-  .B{background:#60a5fa;color:#0b1220}
-  .C{background:#a78bfa;color:#0e0a1a}
-  .D{background:#9ca3af;color:#111}
-  .delta.pos{color:var(--green)} .delta.neg{color:var(--red)}
-  .pill{font-size:12px;padding:2px 8px;border-radius:999px;background:#0c0f14;border:1px solid var(--line)}
-  .synergy{display:flex;gap:8px;flex-wrap:wrap}
-  .synergy .item{background:#0f131b;border:1px solid var(--line);padding:4px 8px;border-radius:999px}
-  /* Matches vertical */
-  .matches{display:flex;flex-direction:column;gap:14px}
-  .match{
-    position:relative; overflow:hidden;
-    border-radius:18px; border:2px solid var(--line); background:var(--card)
+  root.innerHTML = '';
+  const container = h('div','container');
+  root.appendChild(container);
+  return container;
+}
+
+// ———————————————————————————————
+// UI: header + filtres minimal
+function renderHeader(container: HTMLElement){
+  const title = h('div','h1','OWGG — Tiers, Synergies, Heatmap');
+  container.appendChild(title);
+
+  const filters = h('div','row');
+  const rankSel = select(
+    ['Bronze','Silver','Gold','Platinum','Diamond','Master','GM'],
+    state.rank,
+    v => { state.rank = v as any; renderApp(); }
+  );
+  const mapSel = select(['Toutes cartes', ...MAPS.map(m=>m.name)], 'Toutes cartes',
+    v => {
+      if (v==='Toutes cartes') state.mapId='all';
+      else state.mapId = slugify(MAPS.find(m=>m.name===v)!.id);
+      renderApp();
+    }
+  );
+  const roleSel = select(['All','Tank','DPS','Support'],'All', v=>{
+    state.role = v as any; renderApp();
+  });
+
+  filters.append(
+    chip('Platinum', rankSel), chip('Toutes cartes', mapSel), chip('All', roleSel)
+  );
+  container.appendChild(filters);
+}
+
+function chip(label: string, el: HTMLElement){
+  const wrap = h('div','badge'); wrap.style.display='inline-flex';
+  wrap.style.alignItems='center'; wrap.style.gap='10px';
+  wrap.appendChild(el);
+  return wrap;
+}
+function select(options: string[], value: string, onChange:(v:string)=>void){
+  const sel = document.createElement('select');
+  sel.style.background='transparent'; sel.style.color='var(--text)';
+  sel.style.border='none'; sel.style.outline='none'; sel.style.font='inherit';
+  for(const o of options){
+    const op = document.createElement('option'); op.value=o; op.text=o;
+    if (o===value) op.selected = true;
+    sel.appendChild(op);
   }
-  .match.win{border-color:rgba(89,169,255,.7); box-shadow:0 0 0 2px rgba(89,169,255,.12) inset}
-  .match.loss{border-color:rgba(255,106,118,.75); box-shadow:0 0 0 2px rgba(255,106,118,.10) inset}
-  .match .bg{position:absolute;inset:0;opacity:.22;background-size:cover;background-position:center;filter:saturate(.95) contrast(1.06)}
-  .match .overlay{position:absolute;inset:0;background:radial-gradient(120% 140% at 10% 0%, rgba(0,0,0,.55), rgba(0,0,0,.15) 60%, rgba(0,0,0,.55))}
-  .match .content{position:relative;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px}
-  .match .hero{
-    width:56px;height:56px;border-radius:12px;border:2px solid rgba(255,255,255,.12);
-    background:#0c0f14 url('') center/cover no-repeat
-  }
-  .match .meta{display:flex;flex-direction:column}
-  .match .title{font-weight:800;letter-spacing:.3px}
-  .match .sub{font-size:12px;color:var(--muted)}
-  .match .right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-  .match .status{font-weight:800;border-radius:999px;padding:4px 10px;background:#0c1016;border:1px solid var(--line)}
-  .match.win .status{color:#bfe0ff;border-color:rgba(89,169,255,.4)}
-  .match.loss .status{color:#ffc2c7;border-color:rgba(255,106,118,.4)}
-  .tags{display:flex;gap:6px;flex-wrap:wrap}
-  .tag{font-size:12px;border:1px solid var(--line);background:#0e1117;border-radius:999px;padding:3px 8px}
-  /* KPIs */
-  .kpi{display:flex;gap:6px;align-items:center}
-  @media(max-width:1000px){ .layout{grid-template-columns:1fr} }
+  sel.onchange = ()=> onChange(sel.value);
+  return sel;
+}
+
+function slugify(s: string){ return s.toLowerCase().replace(/\s+/g,'-'); }
+
+// ———————————————————————————————
+// TIER LIST
+function renderTierList(container: HTMLElement){
+  const section = h('div','card section');
+  const title = h('div','','Tier list'); title.style.fontSize='22px'; title.style.fontWeight='800'; title.style.marginBottom='8px';
+  section.appendChild(title);
+
+  const table = h('table','table');
+  table.innerHTML = `
+    <thead><tr>
+      <th>Héros</th>
+      <th>Winrate</th>
+      <th>Pick</th>
+      <th>Sample</th>
+      <th>Synergies / Contres</th>
+    </tr></thead>
+    <tbody></tbody>
   `;
-  const s=document.createElement('style'); s.textContent=css; document.head.appendChild(s);
+  const tbody = table.querySelector('tbody')!;
+
+  const rows = TIER_ROWS.filter(r =>
+    r.rank===state.rank &&
+    (!r.mapId || state.mapId==='all') &&
+    (state.role==='All' || HEROES.find(h=>h.id===r.heroId)!.role===state.role)
+  ).filter(r=>!r.mapId); // global uniquement pour la table
+
+  // tri par winrate
+  rows.sort((a,b)=>b.winRate-a.winRate);
+
+  for(const r of rows.slice(0,12)){
+    const hero = HEROES.find(h=>h.id===r.heroId)!;
+    const tr = document.createElement('tr');
+
+    // Col 1: Tier + hero chip
+    const tdHero = document.createElement('td');
+    const letter = computeTierLetter(r.winRate, r.sample);
+    const pill = h('span','tier-pill '+(
+      letter==='S'?'tier-s' : letter==='A'?'tier-a' : letter==='B'?'tier-b' : letter==='C'?'tier-c':'tier-d'
+    ), letter);
+    pill.style.marginRight='10px';
+
+    const chipWrap = h('span','hero-chip');
+    const img = document.createElement('img');
+    img.src = HERO_ICON(hero.id);
+    img.alt = hero.name;
+    img.onerror = ()=>{ img.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"/>'; };
+    chipWrap.append(img, document.createTextNode(hero.name), space(), roleTag(hero));
+    tdHero.append(pill, chipWrap);
+
+    // Col 2-4: KPIs
+    const tdWR = document.createElement('td');
+    tdWR.innerHTML = `<div class="kpi"><span class="big">${fmtPct(r.winRate)}</span>
+      <span class="${(r.delta7d?.winRate||0)>=0?'delta-up':'delta-down'}">${fmtDelta(r.delta7d?.winRate||0)}</span></div>`;
+
+    const tdPR = document.createElement('td');
+    tdPR.innerHTML = `<div class="kpi"><span class="big">${fmtPct(r.pickRate)}</span>
+      <span class="${(r.delta7d?.pickRate||0)>=0?'delta-up':'delta-down'}">${fmtDelta(r.delta7d?.pickRate||0)}</span></div>`;
+
+    const tdN = document.createElement('td'); tdN.textContent = 'n='+r.sample;
+
+    // Col 5: synergies (mock à partir des WR)
+    const tdSyn = document.createElement('td'); tdSyn.className='synergy-col';
+    const others = TIER_ROWS.filter(x=>x.rank===r.rank && x.heroId!==r.heroId && !x.mapId);
+    others.sort((a,b)=>(b.winRate-a.winRate)).slice(0,3).forEach(x=>{
+      const diff = +(x.winRate - r.winRate).toFixed(3);
+      const pill = h('span','synergy-pill '+(diff>=0?'synergy-pos':'synergy-neg'), `${HEROES.find(h=>h.id===x.heroId)!.name} ${diff>=0?'+':''}${(diff*100).toFixed(1)}%`);
+      tdSyn.appendChild(pill);
+    });
+
+    tr.append(tdHero, tdWR, tdPR, tdN, tdSyn);
+    tbody.appendChild(tr);
+  }
+
+  section.appendChild(table);
+  container.appendChild(section);
 }
 
-function layout(){
-  document.body.innerHTML = `
-  <div class="container">
-    <h1>OWGG — <span class="sub">Tiers, synergies, historique</span></h1>
+function roleTag(hero: Hero){
+  const tag = h('span','badge',hero.role);
+  tag.style.color = 'var(--sub)';
+  return tag;
+}
+function space(){ return document.createTextNode(' '); }
 
-    <div class="filters">
-      <select id="rank">
-        ${(['Bronze','Silver','Gold','Platinum','Diamond','Master','GM'] as Rank[]).map(r=>`<option ${r==='Platinum'?'selected':''}>${r}</option>`).join('')}
-      </select>
-      <select id="map">
-        <option value="">Toutes cartes</option>
-        ${MAPS.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}
-      </select>
-      <select id="role">
-        ${['All','Tank','DPS','Support'].map(r=>`<option ${r==='All'?'selected':''}>${r}</option>`).join('')}
-      </select>
-    </div>
+// ———————————————————————————————
+// FEED (vertical)
+function renderFeed(container: HTMLElement){
+  const section = h('div','card section');
+  const title = h('div','','Historique'); title.style.fontSize='22px'; title.style.fontWeight='800'; title.style.marginBottom='10px';
+  section.appendChild(title);
 
-    <div class="layout">
-      <div id="col-main"></div>
-      <div id="col-side"></div>
-    </div>
-  </div>`;
-  $('#rank')!.addEventListener('change',e=>{ STATE.rank=(e.target as HTMLSelectElement).value as Rank; render(); });
-  $('#map')!.addEventListener('change',e=>{ const v=(e.target as HTMLSelectElement).value; STATE.mapId = v||undefined; render(); });
-  $('#role')!.addEventListener('change',e=>{ STATE.role=(e.target as HTMLSelectElement).value as any; render(); });
+  const feed = h('div','feed');
+
+  // filtre de matches selon filtres globaux
+  const list = MATCHES.filter(m =>
+    (state.mapId==='all' || m.mapId===state.mapId) &&
+    (state.role==='All' || HEROES.find(h=>h.id===m.heroId)!.role===state.role) &&
+    (m.rank===state.rank)
+  );
+
+  for(const m of list){
+    feed.appendChild(matchCard(m));
+  }
+
+  section.appendChild(feed);
+  container.appendChild(section);
 }
 
-/** Trouve le meilleur et le pire allié pour un héros donné, au rang / carte filtrés */
-function topSynergiesFor(heroId:string){
-  const plus = listSynergies(TIER_ROWS, heroId, STATE.rank, STATE.mapId)
-    .filter(s=>s.score>0).sort((a,b)=>b.score-a.score)[0];
-  const minus = listSynergies(TIER_ROWS, heroId, STATE.rank, STATE.mapId)
-    .filter(s=>s.score<0).sort((a,b)=>a.score-b.score)[0];
-  return { plus, minus };
+function matchCard(m: MatchItem){
+  const hero = HEROES.find(h=>h.id===m.heroId)!;
+  const map: MapInfo = MAPS.find(x=>x.id===m.mapId)!;
+
+  const art = h('article','match '+(m.result==='Win'?'win':'loss'));
+
+  const bg = h('div','bg');  // image de fond
+  art.appendChild(bg);
+  const shade = h('div','shade'); art.appendChild(shade);
+
+  const row = h('div','content');
+
+  // gauche
+  const left = h('div','left');
+  const heroBox = h('div','hero');
+  const img = document.createElement('img');
+  img.src = HERO_ICON(hero.id);
+  img.alt = hero.name;
+  img.onerror = ()=>{ img.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="54" height="54"/>'; };
+  heroBox.appendChild(img);
+
+  const meta = h('div','meta');
+  const title = h('div','title', hero.name);
+  const sub = h('div','sub', map.name);
+  const kda = h('div','kda', `K/D/A: ${m.kda[0]}/${m.kda[1]}/${m.kda[2]}`);
+  const when = new Date(m.date).toLocaleString();
+  const date = h('div','sub', when);
+  meta.append(title, sub, kda, date);
+
+  left.append(heroBox, meta);
+
+  // droite
+  const right = h('div','right');
+  const pill = h('div','result', m.result==='Win'?'Victoire':'Défaite');
+  right.appendChild(pill);
+
+  row.append(left, right);
+  art.appendChild(row);
+
+  // image de fond (local -> fallback)
+  setBgWithFallback(bg, m.mapId, MAP_THUMB(m.mapId));
+
+  return art;
 }
 
-function viewTiers():string{
-  const rows = TIER_ROWS.filter(r=>r.rank===STATE.rank && (!STATE.mapId || r.mapId===STATE.mapId));
-  const bestByHero = new Map<string,TierRow>();
-  for(const r of rows){ const k=r.heroId; if(!bestByHero.has(k) || (bestByHero.get(k)!.winRate<r.winRate)) bestByHero.set(k,r); }
-  const heroList = HEROES.filter(h=>STATE.role==='All' || h.role===STATE.role)
-    .sort((a,b)=>(bestByHero.get(b.id)?.winRate ?? 0)-(bestByHero.get(a.id)?.winRate ?? 0));
+// ———————————————————————————————
+// App
+export default function App(){
+  // Génère les données (une seule fois)
+  if (TIER_ROWS.length===0) TIER_ROWS = generateTierData();
+  if (MATCHES.length===0)    MATCHES   = generateMatches(TIER_ROWS);
 
-  const rowsHtml = heroList.map(h=>{
-    const r = bestByHero.get(h.id); if(!r) return '';
-    const tier = computeTierLetter(r.winRate, r.sample);
-    const dW = r.delta7d?.winRate ?? 0, dP = r.delta7d?.pickRate ?? 0;
-    const syns = topSynergiesFor(h.id);
-    const synHtml = [syns.plus, syns.minus].filter(Boolean).map(s=>(
-      `<span class="item" style="color:${(s!.score>=0)?'#34d399':'#ff7a85'}">${HERO_NAME(s!.withHeroId)} ${(s!.score>=0?'+':'')}${(s!.score*100).toFixed(1)}%</span>`
-    )).join('');
-    return `
-    <div class="heroRow">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="badge ${tier}">${tier}</span>
-        <strong>${h.name}</strong> <span class="pill">${h.role}</span>
-      </div>
-      <div>${fmtPct(r.winRate)} <span class="delta ${dW>0?'pos':dW<0?'neg':''}">${fmtDelta(dW)}</span></div>
-      <div>${fmtPct(r.pickRate)} <span class="delta ${dP>0?'pos':dP<0?'neg':''}">${fmtDelta(dP)}</span></div>
-      <div>n=${r.sample}</div>
-      <div class="synergy">${synHtml}</div>
-    </div>`;
-  }).join('');
+  const root = mountRoot();
+  renderHeader(root);
+  renderTierList(root);
+  renderFeed(root);
 
-  return `
-    <div class="card">
-      <div class="section-title">Tier list</div>
-      <div class="tiers">
-        <div class="head">Héros</div><div class="head">Winrate</div><div class="head">Pick</div><div class="head">Sample</div><div class="head">Synergies</div>
-        ${rowsHtml}
-      </div>
-    </div>`;
+  // pied de page
+  const foot = h('div','footer','OWGG — demo. Images locales dans /public/maps et /public/heroes');
+  root.appendChild(foot);
 }
 
-function viewMatches():string{
-  const items = MATCHES.map(m=>{
-    const win = m.result==='Win';
-    // image locale de la carte, avec fallback si non présente
-    const local = MAP_IMAGE(m.mapId);
-    const fallback = MAP_THUMB(m.mapId);
-    const heroIcon = HERO_ICON(m.heroId);
-
-    const { plus, minus } = topSynergiesFor(m.heroId);
-    const tags = [
-      plus ? `<span class="tag" style="color:#34d399">+ ${HERO_NAME(plus.withHeroId)} ${(plus.score*100).toFixed(1)}%</span>` : '',
-      minus? `<span class="tag" style="color:#ff7a85">- ${HERO_NAME(minus.withHeroId)} ${(minus.score*100).toFixed(1)}%</span>` : '',
-      `<span class="tag">${MAP_NAME(m.mapId)}</span>`
-    ].join('');
-
-    const kda = `${m.kda[0]}/${m.kda[1]}/${m.kda[2]}`;
-    const date = new Date(m.date).toLocaleString();
-
-    return `
-    <div class="match ${win?'win':'loss'}">
-      <div class="bg" style="background-image:url('${local}')" onerror="this.style.backgroundImage='url(${JSON.stringify(fallback)})'"></div>
-      <div class="overlay"></div>
-      <div class="content">
-        <div class="hero" style="background-image:url('${heroIcon}')"></div>
-        <div class="meta">
-          <div class="title">${HERO_NAME(m.heroId)}</div>
-          <div class="sub">${date} • K/D/A ${kda}</div>
-          <div class="tags">${tags}</div>
-        </div>
-        <div class="right">
-          <div class="status">${win?'Victoire':'Défaite'}</div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  return `
-    <div class="card">
-      <div class="section-title">Historique</div>
-      <div class="matches">${items}</div>
-    </div>`;
-}
-
-function viewSide():string{
-  const total = MATCHES.length;
-  const wins  = MATCHES.filter(m=>m.result==='Win').length;
-  const wr = total? (wins/total):0;
-
-  return `
-    <div class="card">
-      <div class="section-title">Mes KPIs</div>
-      <div class="kpi">Parties: <strong>${total}</strong></div>
-      <div class="kpi">Victoires: <strong>${wins}</strong></div>
-      <div class="kpi">Winrate: <strong>${(wr*100).toFixed(1)}%</strong></div>
-      <hr style="border-color:var(--line);opacity:.4;margin:10px 0">
-      <div class="kpi">Objectif Winrate 55%
-        <div style="flex:1;height:8px;background:#0a0d12;border:1px solid var(--line);border-radius:999px;overflow:hidden;margin-left:8px">
-          <div style="width:${Math.min(100, (wr/0.55)*100)}%;height:100%;background:linear-gradient(90deg,#34d399,#a7f3d0)"></div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function render(){
-  $('#col-main')!.innerHTML = viewTiers() + viewMatches();
-  $('#col-side')!.innerHTML = viewSide();
-}
-
-export default async function App(){
-  mountStyles();
-  layout();
-  // Données locales (pas d’appels réseau)
-  TIER_ROWS = generateTierData();
-  MATCHES   = generateMatches(TIER_ROWS);
-  render();
-}
+function renderApp(){ App(); }
