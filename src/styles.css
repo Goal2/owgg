@@ -1,0 +1,68 @@
+:root{
+  --bg:#0b0c10; --fg:#e7eaee; --muted:#a1a7b3;
+  --card:#14161b; --card2:#101218; --border:#20232b;
+  --blue:#4ea6ff; --red:#ff6b6b; --green:#59d98d;
+  --pillPos: rgba(89,217,141,.15);
+  --pillNeg: rgba(255,107,107,.12);
+}
+*{box-sizing:border-box}
+html,body,#app{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji"}
+img{display:block;max-width:100%}
+
+/* Header */
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:linear-gradient(180deg,rgba(11,12,16,.95),rgba(11,12,16,.85))}
+.brand{font-weight:800;font-size:20px;letter-spacing:.4px;background:linear-gradient(90deg,#6ee7ff,#7c83ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.nav{display:flex;gap:8px;flex-wrap:wrap}
+.tab{background:var(--card2);color:var(--fg);border:1px solid var(--border);border-radius:12px;padding:8px 12px;cursor:pointer}
+.tab:hover{border-color:#2b2f39}
+
+/* Filters */
+.filters{padding:12px 16px;display:flex;gap:12px;flex-wrap:wrap}
+.filter{display:flex;flex-direction:column;gap:6px}
+.sel{background:var(--card2);color:var(--fg);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+
+/* Card */
+.card{background:var(--card);margin:12px 16px;border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.card>h2{margin:12px 12px 0;font-size:18px}
+
+/* Table (tier list) */
+.table{display:grid;gap:0;padding:8px 12px}
+.row{display:grid;grid-template-columns: 1.2fr .6fr .6fr .6fr 1fr;align-items:center;gap:12px;padding:10px 6px;border-top:1px solid var(--border)}
+.row.head{opacity:.7;text-transform:uppercase;font-size:12px}
+.cell{display:flex;gap:8px;align-items:center}
+.dim{color:var(--muted)}
+.hero-cell{display:flex;align-items:center;gap:10px}
+.avatar{width:28px;height:28px;border-radius:6px;object-fit:cover;border:1px solid #2a2e36}
+.img-fallback{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,#1a1c22,#0f1116)}
+.hero-name{font-weight:600}
+.role-badge{font-size:12px;color:#cbd3e0;background:#19202a;border:1px solid #283144;border-radius:999px;padding:2px 8px}
+.tier-badge{font-weight:700;font-size:12px;color:#0c1410;background:#183226;border:1px solid #1e4c33;border-radius:999px;padding:2px 8px;margin-left:2px}
+.stat{display:flex;align-items:baseline;gap:8px}
+.stat-main{font-weight:600}
+.stat-trend.up{color:var(--green)} .stat-trend.down{color:var(--red)}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{border-radius:999px;padding:3px 8px;font-size:12px;border:1px solid #2a2e36}
+.pill.pos{background:var(--pillPos);color:#9cf2bf;border-color:#265b40}
+.pill.neg{background:var(--pillNeg);color:#ffb4b4;border-color:#5a2a2a}
+
+/* History */
+.history{display:flex;flex-direction:column;gap:12px;padding:12px}
+.match{position:relative;border-radius:16px;border:2px solid transparent;overflow:hidden}
+.match.win{border-color:rgba(78,166,255,.6)} .match.loss{border-color:rgba(255,107,107,.6)}
+.match-bg{position:absolute;inset:0;background:linear-gradient(180deg,#0e1015,#0e1015), var(--bg-url);background-size:cover;background-position:center;filter:brightness(.35);opacity:.9}
+.match-overlay{position:absolute;inset:0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}
+.match-top{position:relative;display:flex;align-items:center;justify-content:space-between;padding:16px;gap:12px}
+.match-left{display:flex;align-items:center;gap:12px}
+.match-hero{width:54px;height:54px;border-radius:12px;border:1px solid #2a2e36;object-fit:cover;background:#0f1116}
+.match-hero-name{font-weight:800;font-size:16px}
+.match-map{opacity:.85}
+.match-kda{font-weight:600}
+.badge{padding:6px 10px;border-radius:999px;border:1px solid transparent;background:rgba(0,0,0,.35);backdrop-filter:blur(4px)}
+.badge-win{color:#b8daff;border-color:#2b4970}
+.badge-loss{color:#ffc2c2;border-color:#6b2b2b}
+
+/* Responsive */
+@media (max-width: 760px){
+  .row{grid-template-columns: 1.5fr .7fr .7fr .7fr 1fr}
+}
