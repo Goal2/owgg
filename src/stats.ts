@@ -1,206 +1,197 @@
-/** Types de base */
-export type Role = "Tank" | "DPS" | "Support";
+// src/stats.ts
+// Données "seed" simples pour la démo (tier list + historique).
+// Les chemins d'images pointent vers /heroes et /maps (Option 1 choisie par toi).
 
-export type Hero = {
+/* ===========================
+   Types
+=========================== */
+
+export type Role = "Tank" | "Support" | "DPS";
+
+export interface Hero {
   id: string;
   name: string;
   role: Role;
-  tier: "S" | "A" | "B" | "C" | "D";
-  winrate: number; // 0..1
-  pickrate: number; // 0..1
-  sample: number;
-  deltaWin: number; // en points de % (ex: +0.8 => +0.8%)
-  deltaPick: number;
-  portrait: string; // chemin local
-  synergies: Array<{ with: string; delta: number }>;
-  counters: Array<{ vs: string; delta: number }>;
-};
+  portrait: string; // /heroes/*.png
+  color: string; // badge color
+}
 
-export type MapId =
-  | "route-66"
-  | "kings-row"
-  | "ilios"
-  | "junkertown";
-
-export type Match = {
+export interface MapT {
   id: string;
-  when: string;              // ISO ou déjà prêt à afficher
-  mapId: MapId;
-  mapName: string;
-  heroId: string;            // héros le plus joué
-  heroName: string;
-  heroAvatar: string;        // chemin local
-  k: number;
-  d: number;
-  a: number;
-  victory: boolean;
+  name: string;
+  code: string; // petit code affiché éventuellement
+  image: string; // /maps/*.jpg
+}
+
+/* ===========================
+   Images de cartes (Option 1)
+=========================== */
+
+export const MAP_IMAGES: Record<string, string> = {
+  "route-66": "/maps/route-66.jpg",
+  "kings-row": "/maps/kings-row.jpg",
+  ilios: "/maps/ilios.jpg",
+  junkertown: "/maps/junkertown.jpg",
 };
 
-/** Dictionnaire d’images locales de maps (mets tes fichiers dans /public/assets/maps) */
-export const MAP_IMAGES: Record<MapId, string> = {
-  "route-66": "/assets/maps/route-66.jpg",
-  "kings-row": "/assets/maps/kings-row.jpg",
-  "ilios": "/assets/maps/ilios.jpg",
-  "junkertown": "/assets/maps/junkertown.jpg"
-};
+/* ===========================
+   Cartes
+=========================== */
 
-/** Héros (exemple / démo) -> mets tes portraits dans /public/assets/heroes */
+export const MAPS: MapT[] = [
+  { id: "route-66", name: "Route 66", code: "R66", image: MAP_IMAGES["route-66"] },
+  { id: "kings-row", name: "King's Row", code: "KR", image: MAP_IMAGES["kings-row"] },
+  { id: "ilios", name: "Ilios", code: "IL", image: MAP_IMAGES["ilios"] },
+  { id: "junkertown", name: "Junkertown", code: "JT", image: MAP_IMAGES["junkertown"] },
+];
+
+export const MAP_BY_ID: Record<string, MapT> = Object.fromEntries(
+  MAPS.map((m) => [m.id, m])
+);
+
+/* ===========================
+   Héros (portraits Option 1)
+=========================== */
+
 export const HEROES: Hero[] = [
   {
     id: "reinhardt",
     name: "Reinhardt",
     role: "Tank",
-    tier: "A",
-    winrate: 0.551,
-    pickrate: 0.046,
-    sample: 6998,
-    deltaWin: -0.32,
-    deltaPick: +0.24,
-    portrait: "/assets/heroes/reinhardt.png",
-    synergies: [
-      { with: "Zarya", delta: +2.6 },
-      { with: "Lucio", delta: +2.3 }
-    ],
-    counters: [
-      { vs: "Ana", delta: -0.8 },
-      { vs: "Tracer", delta: -1.1 }
-    ]
+    portrait: "/heroes/reinhardt.png",
+    color: "#22c55e",
   },
   {
     id: "lucio",
     name: "Lucio",
     role: "Support",
-    tier: "D",
-    winrate: 0.449,
-    pickrate: 0.122,
-    sample: 6937,
-    deltaWin: -0.38,
-    deltaPick: +0.04,
-    portrait: "/assets/heroes/lucio.png",
-    synergies: [
-      { with: "Reinhardt", delta: +1.2 },
-      { with: "Tracer", delta: +0.6 }
-    ],
-    counters: [
-      { vs: "Ana", delta: -1.3 },
-      { vs: "Zarya", delta: -0.7 }
-    ]
+    portrait: "/heroes/lucio.png",
+    color: "#22c55e",
   },
   {
     id: "zarya",
     name: "Zarya",
     role: "Tank",
-    tier: "B",
-    winrate: 0.525,
-    pickrate: 0.197,
-    sample: 2367,
-    deltaWin: +0.5,
-    deltaPick: -0.26,
-    portrait: "/assets/heroes/zarya.png",
-    synergies: [
-      { with: "Reinhardt", delta: +1.5 },
-      { with: "Lucio", delta: +0.8 }
-    ],
-    counters: [
-      { vs: "Ana", delta: -0.9 },
-      { vs: "Tracer", delta: -0.6 }
-    ]
+    portrait: "/heroes/zarya.png",
+    color: "#60a5fa",
   },
   {
     id: "tracer",
     name: "Tracer",
     role: "DPS",
-    tier: "B",
-    winrate: 0.509,
-    pickrate: 0.121,
-    sample: 4596,
-    deltaWin: -0.36,
-    deltaPick: +0.04,
-    portrait: "/assets/heroes/tracer.png",
-    synergies: [
-      { with: "Lucio", delta: +0.7 },
-      { with: "Ana", delta: +0.3 }
-    ],
-    counters: [
-      { vs: "Reinhardt", delta: -0.9 },
-      { vs: "Zarya", delta: -0.7 }
-    ]
+    portrait: "/heroes/tracer.png",
+    color: "#60a5fa",
   },
   {
     id: "ana",
     name: "Ana",
     role: "Support",
-    tier: "B",
-    winrate: 0.503,
-    pickrate: 0.186,
-    sample: 6411,
-    deltaWin: -0.09,
-    deltaPick: -0.03,
-    portrait: "/assets/heroes/ana.png",
-    synergies: [
-      { with: "Zarya", delta: +0.6 },
-      { with: "Reinhardt", delta: +0.4 }
-    ],
-    counters: [
-      { vs: "Lucio", delta: +1.3 },
-      { vs: "Tracer", delta: +0.8 }
-    ]
-  }
+    portrait: "/heroes/ana.png",
+    color: "#60a5fa",
+  },
 ];
 
-/** Historique de matchs (démo) -> mets des images de maps dans /public/assets/maps */
-export const MATCHES: Match[] = [
-  {
-    id: "m1",
-    when: "09/11/2025 20:13:27",
-    mapId: "junkertown",
-    mapName: "Junkertown",
-    heroId: "lucio",
-    heroName: "Lucio",
-    heroAvatar: "/assets/heroes/lucio.png",
-    k: 9, d: 4, a: 11,
-    victory: false
-  },
-  {
-    id: "m2",
-    when: "09/11/2025 19:13:27",
-    mapId: "kings-row",
-    mapName: "King's Row",
-    heroId: "ana",
-    heroName: "Ana",
-    heroAvatar: "/assets/heroes/ana.png",
-    k: 8, d: 4, a: 4,
-    victory: false
-  },
-  {
-    id: "m3",
-    when: "09/11/2025 16:13:27",
-    mapId: "route-66",
-    mapName: "Route 66",
-    heroId: "zarya",
-    heroName: "Zarya",
-    heroAvatar: "/assets/heroes/zarya.png",
-    k: 20, d: 6, a: 3,
-    victory: true
-  },
-  {
-    id: "m4",
-    when: "09/11/2025 15:13:27",
-    mapId: "ilios",
-    mapName: "Ilios",
-    heroId: "tracer",
-    heroName: "Tracer",
-    heroAvatar: "/assets/heroes/tracer.png",
-    k: 17, d: 2, a: 4,
-    victory: true
-  }
-];
+export const HERO_BY_ID: Record<string, Hero> = Object.fromEntries(
+  HEROES.map((h) => [h.id, h])
+);
 
-/** Utilitaires d’affichage */
-export function pct(n: number): string {
-  return (n * 100).toFixed(1) + "%";
+/* ===========================
+   Synergies / Contres (exemple simple)
+=========================== */
+
+export const SYNERGIES: Record<string, string[]> = {
+  reinhardt: ["lucio", "ana", "zarya"],
+  lucio: ["reinhardt", "zarya", "tracer"],
+  zarya: ["reinhardt", "lucio", "tracer"],
+  tracer: ["lucio", "zarya"],
+  ana: ["reinhardt", "zarya"],
+};
+
+export const COUNTERS: Record<string, string[]> = {
+  reinhardt: ["zarya", "ana"],
+  lucio: ["ana"],
+  zarya: ["reinhardt", "tracer"],
+  tracer: ["reinhardt"],
+  ana: ["tracer"],
+};
+
+/* ===========================
+   Fake tier list (valeurs demo)
+=========================== */
+
+export interface TierRow {
+  heroId: string;
+  winrate: number; // 0..1
+  pick: number; // 0..1
+  sample: number;
+  deltaWin?: number; // 0..1 (var jour/sem)
+  deltaPick?: number; // 0..1
 }
-export function signed(n: number): string {
-  const s = n >= 0 ? "+" : "";
-  return s + n.toFixed(1) + "%";
+
+export const TIER_LIST: TierRow[] = [
+  { heroId: "reinhardt", winrate: 0.551, pick: 0.046, sample: 6998, deltaWin: -0.032, deltaPick: 0.024 },
+  { heroId: "zarya", winrate: 0.525, pick: 0.197, sample: 2367, deltaWin: 0.005, deltaPick: -0.026 },
+  { heroId: "tracer", winrate: 0.509, pick: 0.121, sample: 4596, deltaWin: -0.036, deltaPick: 0.004 },
+  { heroId: "ana", winrate: 0.503, pick: 0.186, sample: 6411, deltaWin: -0.009, deltaPick: -0.003 },
+  { heroId: "ashe", winrate: 0.451, pick: 0.092, sample: 1246, deltaWin: -0.03, deltaPick: 0.012 },
+  { heroId: "lucio", winrate: 0.449, pick: 0.122, sample: 6937, deltaWin: -0.038, deltaPick: 0.004 },
+];
+
+/* ===========================
+   Historique — générateur
+=========================== */
+
+export interface MatchRow {
+  id: string;
+  at: number; // timestamp
+  heroId: string;
+  mapId: string;
+  win: boolean;
+  k: number;
+  d: number;
+  a: number;
+}
+
+function rand(min: number, max: number) {
+  return Math.floor(min + Math.random() * (max - min + 1));
+}
+
+export function generateFakeMatches(n = 12): MatchRow[] {
+  const maps = MAPS.map((m) => m.id);
+  const heroes = HEROES.map((h) => h.id);
+
+  const rows: MatchRow[] = [];
+  for (let i = 0; i < n; i++) {
+    const heroId = heroes[rand(0, heroes.length - 1)];
+    const mapId = maps[rand(0, maps.length - 1)];
+    const win = Math.random() > 0.45;
+    const k = rand(3, 28);
+    const d = rand(2, 18);
+    const a = rand(3, 24);
+    rows.push({
+      id: `m${i}-${Date.now() - i * 3600_000}`,
+      at: Date.now() - i * 3600_000,
+      heroId,
+      mapId,
+      win,
+      k,
+      d,
+      a,
+    });
+  }
+  return rows;
+}
+
+/* ===========================
+   Helpers
+=========================== */
+
+export function getSynergies(heroId: string): Hero[] {
+  const ids = SYNERGIES[heroId] ?? [];
+  return ids.map((id) => HERO_BY_ID[id]).filter(Boolean);
+}
+
+export function getCounters(heroId: string): Hero[] {
+  const ids = COUNTERS[heroId] ?? [];
+  return ids.map((id) => HERO_BY_ID[id]).filter(Boolean);
 }
