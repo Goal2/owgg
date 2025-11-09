@@ -1,4 +1,3 @@
-import "./styles.css";
-import App from "./app";
-
+// src/main.ts
+import App from './app';
 App();
