@@ -1,183 +1,206 @@
-// src/stats.ts
+/** Types de base */
+export type Role = "Tank" | "DPS" | "Support";
 
-// ===== Types =====
-export type Rank = 'Bronze'|'Silver'|'Gold'|'Platinum'|'Diamond'|'Master'|'GM';
-export type Role = 'Tank'|'DPS'|'Support';
-
-export interface Hero {
+export type Hero = {
   id: string;
   name: string;
   role: Role;
-}
+  tier: "S" | "A" | "B" | "C" | "D";
+  winrate: number; // 0..1
+  pickrate: number; // 0..1
+  sample: number;
+  deltaWin: number; // en points de % (ex: +0.8 => +0.8%)
+  deltaPick: number;
+  portrait: string; // chemin local
+  synergies: Array<{ with: string; delta: number }>;
+  counters: Array<{ vs: string; delta: number }>;
+};
 
-export interface MapInfo {
-  id: string;           // slug (ex: 'route-66')
-  name: string;         // label (ex: 'Route 66')
-  mode: 'Hybrid'|'Escort'|'Control'|'Flashpoint'|'Push'|'Assault'|'Clash'|'Workshop';
-  thumb: string;        // URL image (fallback web)
-}
+export type MapId =
+  | "route-66"
+  | "kings-row"
+  | "ilios"
+  | "junkertown";
 
-export interface TierRow {
-  heroId: string;
-  rank: Rank;
-  mapId?: string;       // si défini -> stats spécifiques à la carte
-  pickRate: number;     // 0..1
-  winRate: number;      // 0..1
-  sample: number;       // nombre de parties
-  delta7d?: { pickRate: number; winRate: number }; // variation 7j
-}
-
-export interface Synergy {
-  heroId: string;
-  withHeroId: string;
-  score: number;        // >0 synergie, <0 contre
-}
-
-export interface MatchItem {
+export type Match = {
   id: string;
-  date: string;         // ISO
-  mapId: string;
-  heroId: string;
-  result: 'Win'|'Loss';
-  kda: [number, number, number]; // kills, deaths, assists
-  rank: Rank;
-}
+  when: string;              // ISO ou déjà prêt à afficher
+  mapId: MapId;
+  mapName: string;
+  heroId: string;            // héros le plus joué
+  heroName: string;
+  heroAvatar: string;        // chemin local
+  k: number;
+  d: number;
+  a: number;
+  victory: boolean;
+};
 
-// ===== Données (mock) =====
-// Tu peux étendre ces listes. Les ids servent aussi à nommer les fichiers dans /public.
+/** Dictionnaire d’images locales de maps (mets tes fichiers dans /public/assets/maps) */
+export const MAP_IMAGES: Record<MapId, string> = {
+  "route-66": "/assets/maps/route-66.jpg",
+  "kings-row": "/assets/maps/kings-row.jpg",
+  "ilios": "/assets/maps/ilios.jpg",
+  "junkertown": "/assets/maps/junkertown.jpg"
+};
+
+/** Héros (exemple / démo) -> mets tes portraits dans /public/assets/heroes */
 export const HEROES: Hero[] = [
-  { id:'reinhardt', name:'Reinhardt', role:'Tank' },
-  { id:'zarya',     name:'Zarya',     role:'Tank' },
-  { id:'tracer',    name:'Tracer',    role:'DPS'  },
-  { id:'ashe',      name:'Ashe',      role:'DPS'  },
-  { id:'ana',       name:'Ana',       role:'Support' },
-  { id:'lucio',     name:'Lucio',     role:'Support' },
+  {
+    id: "reinhardt",
+    name: "Reinhardt",
+    role: "Tank",
+    tier: "A",
+    winrate: 0.551,
+    pickrate: 0.046,
+    sample: 6998,
+    deltaWin: -0.32,
+    deltaPick: +0.24,
+    portrait: "/assets/heroes/reinhardt.png",
+    synergies: [
+      { with: "Zarya", delta: +2.6 },
+      { with: "Lucio", delta: +2.3 }
+    ],
+    counters: [
+      { vs: "Ana", delta: -0.8 },
+      { vs: "Tracer", delta: -1.1 }
+    ]
+  },
+  {
+    id: "lucio",
+    name: "Lucio",
+    role: "Support",
+    tier: "D",
+    winrate: 0.449,
+    pickrate: 0.122,
+    sample: 6937,
+    deltaWin: -0.38,
+    deltaPick: +0.04,
+    portrait: "/assets/heroes/lucio.png",
+    synergies: [
+      { with: "Reinhardt", delta: +1.2 },
+      { with: "Tracer", delta: +0.6 }
+    ],
+    counters: [
+      { vs: "Ana", delta: -1.3 },
+      { vs: "Zarya", delta: -0.7 }
+    ]
+  },
+  {
+    id: "zarya",
+    name: "Zarya",
+    role: "Tank",
+    tier: "B",
+    winrate: 0.525,
+    pickrate: 0.197,
+    sample: 2367,
+    deltaWin: +0.5,
+    deltaPick: -0.26,
+    portrait: "/assets/heroes/zarya.png",
+    synergies: [
+      { with: "Reinhardt", delta: +1.5 },
+      { with: "Lucio", delta: +0.8 }
+    ],
+    counters: [
+      { vs: "Ana", delta: -0.9 },
+      { vs: "Tracer", delta: -0.6 }
+    ]
+  },
+  {
+    id: "tracer",
+    name: "Tracer",
+    role: "DPS",
+    tier: "B",
+    winrate: 0.509,
+    pickrate: 0.121,
+    sample: 4596,
+    deltaWin: -0.36,
+    deltaPick: +0.04,
+    portrait: "/assets/heroes/tracer.png",
+    synergies: [
+      { with: "Lucio", delta: +0.7 },
+      { with: "Ana", delta: +0.3 }
+    ],
+    counters: [
+      { vs: "Reinhardt", delta: -0.9 },
+      { vs: "Zarya", delta: -0.7 }
+    ]
+  },
+  {
+    id: "ana",
+    name: "Ana",
+    role: "Support",
+    tier: "B",
+    winrate: 0.503,
+    pickrate: 0.186,
+    sample: 6411,
+    deltaWin: -0.09,
+    deltaPick: -0.03,
+    portrait: "/assets/heroes/ana.png",
+    synergies: [
+      { with: "Zarya", delta: +0.6 },
+      { with: "Reinhardt", delta: +0.4 }
+    ],
+    counters: [
+      { vs: "Lucio", delta: +1.3 },
+      { vs: "Tracer", delta: +0.8 }
+    ]
+  }
 ];
 
-export const MAPS: MapInfo[] = [
-  { id:'route-66',  name:'Route 66',  mode:'Escort',
-    thumb:'https://picsum.photos/seed/route-66/1200/675' },
-  { id:'kings-row', name:"King's Row", mode:'Hybrid',
-    thumb:'https://picsum.photos/seed/kings-row/1200/675' },
-  { id:'ilios',     name:'Ilios',     mode:'Control',
-    thumb:'https://picsum.photos/seed/ilios/1200/675' },
-  { id:'junkertown', name:'Junkertown', mode:'Escort',
-    thumb:'https://picsum.photos/seed/junkertown/1200/675' },
-  { id:'lijiang-tower', name:'Lijiang Tower', mode:'Control',
-    thumb:'https://picsum.photos/seed/lijiang-tower/1200/675' },
+/** Historique de matchs (démo) -> mets des images de maps dans /public/assets/maps */
+export const MATCHES: Match[] = [
+  {
+    id: "m1",
+    when: "09/11/2025 20:13:27",
+    mapId: "junkertown",
+    mapName: "Junkertown",
+    heroId: "lucio",
+    heroName: "Lucio",
+    heroAvatar: "/assets/heroes/lucio.png",
+    k: 9, d: 4, a: 11,
+    victory: false
+  },
+  {
+    id: "m2",
+    when: "09/11/2025 19:13:27",
+    mapId: "kings-row",
+    mapName: "King's Row",
+    heroId: "ana",
+    heroName: "Ana",
+    heroAvatar: "/assets/heroes/ana.png",
+    k: 8, d: 4, a: 4,
+    victory: false
+  },
+  {
+    id: "m3",
+    when: "09/11/2025 16:13:27",
+    mapId: "route-66",
+    mapName: "Route 66",
+    heroId: "zarya",
+    heroName: "Zarya",
+    heroAvatar: "/assets/heroes/zarya.png",
+    k: 20, d: 6, a: 3,
+    victory: true
+  },
+  {
+    id: "m4",
+    when: "09/11/2025 15:13:27",
+    mapId: "ilios",
+    mapName: "Ilios",
+    heroId: "tracer",
+    heroName: "Tracer",
+    heroAvatar: "/assets/heroes/tracer.png",
+    k: 17, d: 2, a: 4,
+    victory: true
+  }
 ];
 
-// ===== Utils =====
-const clamp01 = (n:number)=>Math.max(0,Math.min(1,n));
-const rnd = (a:number,b:number)=>a+Math.random()*(b-a);
-
-export const HERO_NAME = (id:string)=>HEROES.find(h=>h.id===id)?.name||id;
-export const MAP_NAME  = (id:string)=>MAPS.find(m=>m.id===id)?.name||id;
-
-// Fallback “web” quand il n’y a pas d’image locale
-export const MAP_THUMB = (id:string)=>MAPS.find(m=>m.id===id)?.thumb||'https://picsum.photos/seed/owgg/1200/675';
-
-// Images locales (à placer dans /public)
-export function MAP_IMAGE(mapId: string): string {
-  // essaie /public/maps/<id>.jpg
-  const slug = mapId.toLowerCase().replace(/\s+/g,'-');
-  return `/maps/${slug}.jpg`;
+/** Utilitaires d’affichage */
+export function pct(n: number): string {
+  return (n * 100).toFixed(1) + "%";
 }
-export function HERO_ICON(heroId: string): string {
-  // essaie /public/heroes/<id>.png
-  const slug = heroId.toLowerCase().replace(/\s+/g,'-');
-  return `/heroes/${slug}.png`;
-}
-
-// ===== Génération de stats mock =====
-export function generateTierData(): TierRow[] {
-  const ranks: Rank[] = ['Bronze','Silver','Gold','Platinum','Diamond','Master','GM'];
-  const rows: TierRow[] = [];
-
-  for (const h of HEROES) {
-    for (const r of ranks) {
-      // base WR selon rôle pour donner un peu de variété
-      const base = h.role==='DPS' ? 0.485 : h.role==='Tank' ? 0.505 : 0.495;
-      const wr = clamp01(base + rnd(-0.05,0.05));
-      const pr = clamp01(0.04 + rnd(0,0.16));
-      const sample = Math.floor(rnd(300, 7000));
-      rows.push({
-        heroId: h.id, rank: r, pickRate: pr, winRate: wr, sample,
-        delta7d: { pickRate: rnd(-0.03,0.03), winRate: rnd(-0.04,0.04) }
-      });
-
-      // variantes par carte
-      for (const m of MAPS) {
-        const adj = m.mode==='Escort' ? 0.01 : m.mode==='Hybrid' ? -0.005 : 0;
-        rows.push({
-          heroId: h.id,
-          rank: r,
-          mapId: m.id,
-          pickRate: clamp01(pr + rnd(-0.02,0.02)),
-          winRate: clamp01(wr + adj + rnd(-0.03,0.03)),
-          sample: Math.floor(sample * rnd(0.15,0.5)),
-          delta7d: { pickRate: rnd(-0.03,0.03), winRate: rnd(-0.04,0.04) }
-        });
-      }
-    }
-  }
-  return rows;
-}
-
-export function computeTierLetter(wr:number, sample:number){
-  // petite pénalité si échantillon faible, bonus léger si très grand
-  const conf = sample<200 ? -0.02 : sample>2500 ? +0.01 : 0;
-  const score = wr + conf;
-  if (score>=0.57) return 'S';
-  if (score>=0.53) return 'A';
-  if (score>=0.50) return 'B';
-  if (score>=0.47) return 'C';
-  return 'D';
-}
-
-export function listSynergies(rows:TierRow[], heroId:string, rank:Rank, mapId?:string): Synergy[] {
-  // Heuristique simple: compare winrate d'autres héros vs le héros de base
-  const base = rows.find(r=>r.heroId===heroId && r.rank===rank && (!mapId || r.mapId===mapId));
-  if(!base) return [];
-  const out: Synergy[] = [];
-  for(const h of HEROES){
-    if(h.id===heroId) continue;
-    const r = rows.find(x=>x.heroId===h.id && x.rank===rank && (!mapId || x.mapId===mapId));
-    if(!r) continue;
-    out.push({ heroId, withHeroId:h.id, score: +(r.winRate - base.winRate).toFixed(3) });
-  }
-  // tri décroissant et retourne quelques éléments (utilisé côté UI)
-  out.sort((a,b)=>b.score-a.score);
-  return out;
-}
-
-export function generateMatches(rows:TierRow[]): MatchItem[] {
-  // 24 matchs simulés
-  const picks = rows.filter(r=>!r.mapId && r.rank==='Platinum');
-  const out: MatchItem[] = [];
-  for(let i=0;i<24;i++){
-    const p = picks[Math.floor(Math.random()*picks.length)];
-    const m = MAPS[Math.floor(Math.random()*MAPS.length)];
-    const res = Math.random() < p.winRate ? 'Win' : 'Loss';
-    const k = Math.floor(rnd(6,22));
-    const d = Math.floor(rnd(2,12));
-    const a = Math.floor(rnd(3,18));
-    out.push({
-      id: 'm'+i,
-      date: new Date(Date.now()-i*3600*1000).toISOString(),
-      mapId: m.id,
-      heroId: p.heroId,
-      result: res,
-      kda: [k,d,a],
-      rank: 'Platinum'
-    });
-  }
-  return out;
-}
-
-// ===== Format helpers =====
-export function fmtPct(n:number){ return (n*100).toFixed(1)+'%'; }
-export function fmtDelta(n:number){
-  const s = (n*100).toFixed(1)+'%';
-  return n>0 ? `↑ ${s}` : n<0 ? `↓ ${s}` : '—';
+export function signed(n: number): string {
+  const s = n >= 0 ? "+" : "";
+  return s + n.toFixed(1) + "%";
 }
