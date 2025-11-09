@@ -1,7 +1,7 @@
 {
-  "name": "OWGG",
-  "short_name": "OWGG",
-  "start_url": ".",
+  "name": "Ulto.gg",
+  "short_name": "Ulto.gg",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0c10",
   "theme_color": "#0b0c10",
