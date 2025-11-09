@@ -1,2 +1,4 @@
-import App from './app';
+import "./styles.css";
+import App from "./app";
+
 App();
