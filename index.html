@@ -2,27 +2,17 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ulto.GG — Stats Overwatch</title>
+    <meta name="application-name" content="Ulto.GG" />
     <meta name="theme-color" content="#0b0c10" />
-    <title>OWGG</title>
-
-    <!-- PWA -->
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-
-    <!-- Vite injectera le JS module via src/main.ts -->
+    <meta property="og:site_name" content="Ulto.GG" />
+    <meta property="og:title" content="Ulto.GG — Stats Overwatch" />
+    <meta property="og:description" content="Tier list, synergies & historique de parties façon OP.GG pour Overwatch." />
+    <link rel="icon" href="/assets/brand/ulto-gg.svg" />
   </head>
   <body>
-    <!-- Le script App() monte toute l’UI dynamiquement -->
-    <script type="module">
-      import App from '/src/app.ts';
-      import { registerPWA } from '/src/pwa.ts';
-      App();
-      registerPWA();
-    </script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
